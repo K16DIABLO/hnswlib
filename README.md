@@ -14,5 +14,5 @@ To reproduce baseline HNSW results:
 ./main_1m
 ```
 
-Parameters are hardcoded in **1m_test.cpp**
+Parameters are hardcoded in **1m_test.cpp**  
 Please refer to [ALGO_PARAMS.md](ALGO_PARAMS.md)
