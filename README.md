@@ -51,7 +51,7 @@ Install Dependencies:
 $ sudo apt-get install g++ cmake libgoogle-perftools-dev libeigen3-dev
 ```
 
-### Million-scale tests reproduction in WWW'2025 paper
+### Million-scale Tests Reproduction in WWW'2025 Paper
 Download datasets in the `dataset` directory
 To compile:
 ```bash
