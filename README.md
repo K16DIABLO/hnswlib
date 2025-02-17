@@ -25,7 +25,7 @@ This repository is HNSW with ADA-NNS. ADA-NNS is a novel guided search algorithm
 ### Dataset Conversion
 
 For datasets provided in HDF5 format (e.g., GLOVE-100 and NYTIMES), 
-Parse HDF5 and generate fvecs and ivecs as follows:
+Parse HDF5 and generate fvecs and ivecs as follows:  
 ```bash
 python ./utils/hdf5_to_vecs.py [hdf5_file_name]
 mkdir -p dataset/[dataset_name]
