@@ -32,7 +32,7 @@ mkdir -p dataset/[dataset_name]
 mv [dataset_name]_*vecs dataset/[dataset_name]
 ```
 
-### HNSW index parameters
+### HNSW Index Parameters
 
 The parameters used to build each HNSW index is as follows:
 
@@ -45,7 +45,7 @@ The parameters used to build each HNSW index is as follows:
 | NYTIMES      | 500 | 16   |
 | DEEP100M       | 800  | 40   |
 
-### HNSW search parameters (ADA-NNS)
+### HNSW Search Parameters (ADA-NNS)
 
 | Dataset          | tau   | hash_bitwidth     |
 |----------|-----------|-------------|
@@ -67,7 +67,7 @@ Install Dependencies:
 $ sudo apt-get install g++ cmake libgoogle-perftools-dev libeigen3-dev
 ```
 
-### Million-scale tests reproduction in WWW'2025 paper
+### Million-scale Tests Reproduction in WWW'2025 Paper
 Download datasets in the `dataset` directory
 To compile:
 ```bash
@@ -76,7 +76,7 @@ cd build
 cmake .. && make -j
 ```
 
-To reproduce baseline HNSW results:
+To reproduce ADA-NNS (HNSW) results:
 ```bash
 ./main_1m
 ```
