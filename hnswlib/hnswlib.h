@@ -56,6 +56,10 @@ static uint64_t xgetbv(unsigned int index) {
 #define PORTABLE_ALIGN64 __declspec(align(64))
 #endif
 
+#include <chrono>
+#include <Eigen/Dense>
+using namespace Eigen;
+
 // Adapted from https://github.com/Mysticial/FeatureDetector
 #define _XCR_XFEATURE_ENABLED_MASK  0
 
@@ -171,12 +175,19 @@ template<typename MTYPE>
 using DISTFUNC = MTYPE(*)(const void *, const void *, const void *);
 
 template<typename MTYPE>
+using NORMFUNC = MTYPE(*)(const void *, const void *);
+
+template<typename MTYPE>
 class SpaceInterface {
  public:
     // virtual void search(void *);
     virtual size_t get_data_size() = 0;
 
     virtual DISTFUNC<MTYPE> get_dist_func() = 0;
+
+    virtual NORMFUNC<MTYPE> get_norm_func() = 0;
+
+    virtual DISTFUNC<MTYPE> get_dot_func() = 0;
 
     virtual void *get_dist_func_param() = 0;
 
@@ -189,7 +200,7 @@ class AlgorithmInterface {
     virtual void addPoint(const void *datapoint, labeltype label, bool replace_deleted = false) = 0;
 
     virtual std::priority_queue<std::pair<dist_t, labeltype>>
-        searchKnn(const void*, size_t, BaseFilterFunctor* isIdAllowed = nullptr) const = 0;
+        searchKnn(const void*, size_t, BaseFilterFunctor* isIdAllowed = nullptr, void* hashed_query_buffer = nullptr) const = 0;
 
     // Return k nearest neighbor in the order of closer fist
     virtual std::vector<std::pair<dist_t, labeltype>>

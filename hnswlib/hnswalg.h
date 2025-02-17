@@ -70,6 +70,19 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
     std::mutex deleted_elements_lock;  // lock for deleted_elements
     std::unordered_set<tableint> deleted_elements;  // contains internal ids of deleted elements
 
+    // Sungjun Jung: Similarity metric t compute approximate similarity
+    bool dist_type_; // 0 = L2, 1 = IP
+    NORMFUNC<dist_t> normfunc_;
+    DISTFUNC<dist_t> dotfunc_;
+
+    // Sungjun Jung: ADA-NNS related data structure
+    float tau_; // candidate selection threshold
+                // _tau = 0.3 means only top 30% of neighbors 
+                // having the smallest angular distance to the query are selected
+    size_t hash_bitwidth_;
+    void* hash_function_;
+    void* hashed_set_;
+
 
     HierarchicalNSW(SpaceInterface<dist_t> *s) {
     }
@@ -80,9 +93,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         const std::string &location,
         bool nmslib = false,
         size_t max_elements = 0,
-        bool allow_replace_deleted = false)
-        : allow_replace_deleted_(allow_replace_deleted) {
-        loadIndex(location, s, max_elements);
+        bool allow_replace_deleted = false,
+        void* hash_function_buffer = NULL,
+        void* hashed_set_buffer = NULL,
+        float tau = 0.0f,
+        size_t hash_bitwidth = 0,
+        bool dist_type = 0)
+        : tau_(tau), hash_bitwidth_(hash_bitwidth), dist_type_(dist_type),
+          allow_replace_deleted_(allow_replace_deleted) {
+        loadIndex(location, s, max_elements,
+            hash_function_buffer, hashed_set_buffer);
     }
 
 
@@ -92,15 +112,23 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         size_t M = 16,
         size_t ef_construction = 200,
         size_t random_seed = 100,
-        bool allow_replace_deleted = false)
+        bool allow_replace_deleted = false,
+        void* hash_function_buffer = NULL,
+        void* hashed_set_buffer = NULL,
+        float tau = 0.0f,
+        size_t hash_bitwidth = 0,
+        bool dist_type = 0)
         : label_op_locks_(MAX_LABEL_OPERATION_LOCKS),
             link_list_locks_(max_elements),
             element_levels_(max_elements),
+            tau_(tau), hash_bitwidth_(hash_bitwidth), dist_type_(dist_type),
             allow_replace_deleted_(allow_replace_deleted) {
         max_elements_ = max_elements;
         num_deleted_ = 0;
         data_size_ = s->get_data_size();
         fstdistfunc_ = s->get_dist_func();
+        normfunc_ = s->get_norm_func();
+        dotfunc_ = s->get_dot_func();
         dist_func_param_ = s->get_dist_func_param();
         if ( M <= 10000 ) {
             M_ = M;
@@ -123,7 +151,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         label_offset_ = size_links_level0_ + data_size_;
         offsetLevel0_ = 0;
 
-        data_level0_memory_ = (char *) malloc(max_elements_ * size_data_per_element_);
+        uint64_t hash_len = (hash_bitwidth_ >> 3) + 2 * sizeof(float);
+        uint64_t hash_function_size = *(size_t*)dist_func_param_ * hash_bitwidth_ * sizeof(float);
+        uint64_t cosine_table_size = hash_bitwidth_ * sizeof(float);
+        data_level0_memory_ = (char *) malloc(max_elements_ * size_data_per_element_ + max_elements_ * hash_len + hash_function_size + cosine_table_size);
         if (data_level0_memory_ == nullptr)
             throw std::runtime_error("Not enough memory");
 
@@ -141,6 +172,23 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         size_links_per_element_ = maxM_ * sizeof(tableint) + sizeof(linklistsizeint);
         mult_ = 1 / log(1.0 * M_);
         revSize_ = 1.0 / mult_;
+
+        // Sungjun Jung: Copy hashed set
+        for (size_t i = 0; i < max_elements; i++) {
+          float norm = normfunc_(data_level0_memory_ + i * size_data_per_element_ + offsetData_, dist_func_param_);
+          float sqrt_norm = sqrt(norm);
+          memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + i * hash_len), &norm, sizeof(float));
+          memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + i * hash_len + sizeof(float)), &sqrt_norm, sizeof(float));
+          memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + i * hash_len + 2 * sizeof(float)), hashed_set_buffer + i * (hash_bitwidth_ >> 5), hash_len);
+        }
+        // Sungjun Jung: Copy hash function
+        memcpy((data_level0_memory_ + max_elements_ * size_data_per_element_ + max_elements_ * hash_len), hash_function_buffer, hash_function_size);
+        // Sungjun Jung: Generate cosine table for ADA-NNS
+        for (unsigned i = 0; i < hash_bitwidth_; i++) {
+          char* cosine_table_offset = data_level0_memory_ + max_elements_ * size_data_per_element_ + max_elements_ * hash_len + hash_function_size + i * sizeof(float);
+          float cosine_value = cos(i * M_PI / hash_bitwidth_);
+          memcpy(cosine_table_offset, &cosine_value, sizeof(float));
+        }
     }
 
 
@@ -312,11 +360,16 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         tableint ep_id,
         const void *data_point,
         size_t ef,
+        const float query_norm,
+        const float hashed_query_norm,
+        void* hashed_query,
         BaseFilterFunctor* isIdAllowed = nullptr,
         BaseSearchStopCondition<dist_t>* stop_condition = nullptr) const {
         VisitedList *vl = visited_list_pool_->getFreeVisitedList();
         vl_type *visited_array = vl->mass;
         vl_type visited_array_tag = vl->curV;
+
+        std::vector<HashNeighbor> selected_pool(maxM0_);
 
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> top_candidates;
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> candidate_set;
@@ -367,22 +420,22 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                 metric_distance_computations+=size;
             }
 
+            size = CandidateSelection(query_norm, hashed_query_norm, hashed_query, selected_pool, data + 1, size, visited_array, visited_array_tag);
 #ifdef USE_SSE
-            _mm_prefetch((char *) (visited_array + *(data + 1)), _MM_HINT_T0);
-            _mm_prefetch((char *) (visited_array + *(data + 1) + 64), _MM_HINT_T0);
-            _mm_prefetch(data_level0_memory_ + (*(data + 1)) * size_data_per_element_ + offsetData_, _MM_HINT_T0);
+            _mm_prefetch((char *) (visited_array + selected_pool[0].id), _MM_HINT_T0);
+            _mm_prefetch((char *) (visited_array + selected_pool[0].id + 64), _MM_HINT_T0);
+            _mm_prefetch(data_level0_memory_ + (selected_pool[0].id) * size_data_per_element_ + offsetData_, _MM_HINT_T0);
             _mm_prefetch((char *) (data + 2), _MM_HINT_T0);
 #endif
 
             for (size_t j = 1; j <= size; j++) {
-                int candidate_id = *(data + j);
+                int candidate_id = selected_pool[j-1].id;
 //                    if (candidate_id == 0) continue;
 #ifdef USE_SSE
-                _mm_prefetch((char *) (visited_array + *(data + j + 1)), _MM_HINT_T0);
-                _mm_prefetch(data_level0_memory_ + (*(data + j + 1)) * size_data_per_element_ + offsetData_,
+                _mm_prefetch((char *) (visited_array + selected_pool[j].id), _MM_HINT_T0);
+                _mm_prefetch(data_level0_memory_ + (selected_pool[j].id) * size_data_per_element_ + offsetData_,
                                 _MM_HINT_T0);  ////////////
 #endif
-                if (!(visited_array[candidate_id] == visited_array_tag)) {
                     visited_array[candidate_id] = visited_array_tag;
 
                     char *currObj1 = (getDataByInternalId(candidate_id));
@@ -432,7 +485,6 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                             lowerBound = top_candidates.top().first;
                     }
                 }
-            }
         }
 
         visited_list_pool_->releaseVisitedList(vl);
@@ -713,7 +765,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
     }
 
 
-    void loadIndex(const std::string &location, SpaceInterface<dist_t> *s, size_t max_elements_i = 0) {
+    void loadIndex(const std::string &location, SpaceInterface<dist_t> *s, size_t max_elements_i = 0, void* hash_function_buffer = NULL, void* hashed_set_buffer = NULL) {
         std::ifstream input(location, std::ios::binary);
 
         if (!input.is_open())
@@ -748,6 +800,9 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         data_size_ = s->get_data_size();
         fstdistfunc_ = s->get_dist_func();
         dist_func_param_ = s->get_dist_func_param();
+        normfunc_ = s->get_norm_func();
+        dotfunc_ = s->get_dot_func();
+        dist_func_param_ = s->get_dist_func_param();
 
         auto pos = input.tellg();
 
@@ -774,7 +829,12 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
         input.seekg(pos, input.beg);
 
-        data_level0_memory_ = (char *) malloc(max_elements * size_data_per_element_);
+        // Sungjun Jung: ADA-NNS specific parameters
+        uint64_t hash_len = (hash_bitwidth_ >> 3) + 2 * sizeof(float);
+        uint64_t hash_function_size = *(size_t*)dist_func_param_ * hash_bitwidth_ * sizeof(float);
+        uint64_t cosine_table_size = hash_bitwidth_ * sizeof(float);
+
+        data_level0_memory_ = (char *) malloc(max_elements * size_data_per_element_ + max_elements * hash_len + hash_function_size + cosine_table_size);
         if (data_level0_memory_ == nullptr)
             throw std::runtime_error("Not enough memory: loadIndex failed to allocate level0");
         input.read(data_level0_memory_, cur_element_count * size_data_per_element_);
@@ -818,6 +878,24 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
         input.close();
 
+        // Sungjun Jung: Copy hashed set
+        std::cout << "hash len: " << hash_len << std::endl;
+        for (size_t i = 0; i < max_elements; i++) {
+          float norm = normfunc_(data_level0_memory_ + i * size_data_per_element_ + offsetData_, dist_func_param_);
+          float sqrt_norm = sqrt(norm);
+//          std::cout << sqrt_norm << std::endl;
+          memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + i * hash_len), &norm, sizeof(float));
+          memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + i * hash_len + sizeof(float)), &sqrt_norm, sizeof(float));
+          memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + i * hash_len + 2 * sizeof(float)), hashed_set_buffer + i * (hash_bitwidth_ >> 3), hash_len);
+        }
+        // Sungjun Jung: Copy hash function
+        memcpy((data_level0_memory_ + max_elements * size_data_per_element_ + max_elements * hash_len), hash_function_buffer, hash_function_size);
+        // Sungjun Jung: Generate cosine table for ADA-NNS
+        for (unsigned i = 0; i < hash_bitwidth_; i++) {
+          char* cosine_table_offset = data_level0_memory_ + max_elements * size_data_per_element_ + max_elements * hash_len + hash_function_size + i * sizeof(float);
+          float cosine_value = cos(i * M_PI / hash_bitwidth_);
+          memcpy(cosine_table_offset, &cosine_value, sizeof(float));
+        }
         return;
     }
 
@@ -1268,12 +1346,24 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
 
 
     std::priority_queue<std::pair<dist_t, labeltype >>
-    searchKnn(const void *query_data, size_t k, BaseFilterFunctor* isIdAllowed = nullptr) const {
+    searchKnn(const void *query_data, size_t k, BaseFilterFunctor* isIdAllowed = nullptr, void* hashed_query_buffer = nullptr) const {
         std::priority_queue<std::pair<dist_t, labeltype >> result;
         if (cur_element_count == 0) return result;
 
         tableint currObj = enterpoint_node_;
         dist_t curdist = fstdistfunc_(query_data, getDataByInternalId(enterpoint_node_), dist_func_param_);
+
+        // Sungjun Jung: Hash query
+        std::vector<HashNeighbor> selected_pool(maxM0_);
+        float query_norm = sqrt(normfunc_(query_data, dist_func_param_));
+        float hashed_query_norm = 0.0;
+        void* hashed_query = (void*)malloc(sizeof(uint32_t) * (hash_bitwidth_ >> 5));
+        if (hashed_query_buffer == nullptr) {
+          QueryHash((const float*)query_data, hashed_query);
+        }
+        else {
+          memcpy(hashed_query, hashed_query_buffer, (hash_bitwidth_ >> 3));
+        }
 
         for (int level = maxlevel_; level > 0; level--) {
             bool changed = true;
@@ -1286,9 +1376,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
                 metric_hops++;
                 metric_distance_computations+=size;
 
-                tableint *datal = (tableint *) (data + 1);
+                size = CandidateSelection(query_norm, hashed_query_norm, hashed_query, selected_pool, (int*)(data + 1), size, nullptr, 0, level);
+
                 for (int i = 0; i < size; i++) {
-                    tableint cand = datal[i];
+                    tableint cand = selected_pool[i].id;
                     if (cand < 0 || cand > max_elements_)
                         throw std::runtime_error("cand error");
                     dist_t d = fstdistfunc_(query_data, getDataByInternalId(cand), dist_func_param_);
@@ -1306,10 +1397,10 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         bool bare_bone_search = !num_deleted_ && !isIdAllowed;
         if (bare_bone_search) {
             top_candidates = searchBaseLayerST<true>(
-                    currObj, query_data, std::max(ef_, k), isIdAllowed);
+                    currObj, query_data, std::max(ef_, k), query_norm, hashed_query_norm, hashed_query, isIdAllowed);
         } else {
             top_candidates = searchBaseLayerST<false>(
-                    currObj, query_data, std::max(ef_, k), isIdAllowed);
+                    currObj, query_data, std::max(ef_, k), query_norm, hashed_query_norm, hashed_query, isIdAllowed);
         }
 
         while (top_candidates.size() > k) {
@@ -1363,7 +1454,7 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
         }
 
         std::priority_queue<std::pair<dist_t, tableint>, std::vector<std::pair<dist_t, tableint>>, CompareByFirst> top_candidates;
-        top_candidates = searchBaseLayerST<false>(currObj, query_data, 0, isIdAllowed, &stop_condition);
+        top_candidates = searchBaseLayerST<false>(currObj, query_data, 0, 0.0f, 0.0f, nullptr, isIdAllowed, &stop_condition);
 
         size_t sz = top_candidates.size();
         result.resize(sz);
@@ -1407,6 +1498,149 @@ class HierarchicalNSW : public AlgorithmInterface<dist_t> {
             std::cout << "Min inbound: " << min1 << ", Max inbound:" << max1 << "\n";
         }
         std::cout << "integrity ok, checked " << connections_checked << " connections\n";
+    }
+
+    // Sungjun Jung: Below are functions for ADA-NNS
+    void QueryHash(const float* query, void* hashed_query) const {
+      size_t hash_len = (hash_bitwidth_ >> 3) + 2 * sizeof(float);
+      float* hash_function_ = (float*)(data_level0_memory_ + max_elements_ * size_data_per_element_ + max_elements_ * hash_len);
+      size_t dimension_ = *(size_t*)dist_func_param_;
+      for (uint64_t num_integer = 0; num_integer < (hash_bitwidth_ >> 5); num_integer++) {
+        unsigned int result = 0;
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 0)], dist_func_param_) > 0) << 0);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 1)], dist_func_param_) > 0) << 1);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 2)], dist_func_param_) > 0) << 2);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 3)], dist_func_param_) > 0) << 3);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 4)], dist_func_param_) > 0) << 4);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 5)], dist_func_param_) > 0) << 5);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 6)], dist_func_param_) > 0) << 6);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 7)], dist_func_param_) > 0) << 7);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 8)], dist_func_param_) > 0) << 8);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 9)], dist_func_param_) > 0) << 9);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 10)], dist_func_param_) > 0) << 10);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 11)], dist_func_param_) > 0) << 11);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 12)], dist_func_param_) > 0) << 12);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 13)], dist_func_param_) > 0) << 13);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 14)], dist_func_param_) > 0) << 14);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 15)], dist_func_param_) > 0) << 15);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 16)], dist_func_param_) > 0) << 16);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 17)], dist_func_param_) > 0) << 17);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 18)], dist_func_param_) > 0) << 18);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 19)], dist_func_param_) > 0) << 19);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 20)], dist_func_param_) > 0) << 20);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 21)], dist_func_param_) > 0) << 21);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 22)], dist_func_param_) > 0) << 22);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 23)], dist_func_param_) > 0) << 23);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 24)], dist_func_param_) > 0) << 24);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 25)], dist_func_param_) > 0) << 25);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 26)], dist_func_param_) > 0) << 26);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 27)], dist_func_param_) > 0) << 27);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 28)], dist_func_param_) > 0) << 28);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 29)], dist_func_param_) > 0) << 29);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 30)], dist_func_param_) > 0) << 30);
+        result |= ((dotfunc_(query, &hash_function_[dimension_ * (32 * num_integer + 31)], dist_func_param_) > 0) << 31);
+
+        *(uint32_t*)(hashed_query + num_integer * sizeof(uint32_t)) = result;
+      }
+    }
+
+    struct HashNeighbor{
+      tableint id;
+      float distance;
+
+      HashNeighbor() = default;
+      HashNeighbor(tableint id, float distance) : id{id}, distance{distance}{}
+
+      inline bool operator<(const HashNeighbor &other) const {
+        return distance < other.distance;
+      }
+    };
+
+    size_t CandidateSelection(const float query_norm, const float hashed_query_norm, void* hashed_query, std::vector<HashNeighbor>& selected_pool, const int* neighbors, const int num_neighbors, vl_type* visited_array, vl_type visited_array_tag, int level = 0) const {
+      size_t new_size = 0;
+      size_t selected_pool_size_limit;
+      selected_pool_size_limit = (size_t)ceil(num_neighbors * tau_);
+      size_t hash_len = (hash_bitwidth_ >> 3) + 2 * sizeof(float);
+      size_t hash_function_size = *(size_t*)dist_func_param_ * hash_bitwidth_ * sizeof(float);
+      float* cosine_table = (float*)(data_level0_memory_ + max_elements_ * size_data_per_element_ + max_elements_ * hash_len + hash_function_size);
+
+      if (level == 0) {
+        for (int m = 0; m < num_neighbors; m++) {
+          int candidate_id = *(neighbors + m);
+          if (visited_array[candidate_id] == visited_array_tag) continue;
+          selected_pool[new_size].id = candidate_id;
+          for (size_t n = 0; n < hash_len; n += 64) {
+            _mm_prefetch(data_level0_memory_ + max_elements_ * size_data_per_element_ + candidate_id * hash_len + n, _MM_HINT_T0);
+          }
+          new_size++;
+        }
+      }
+      else {
+        for (int m = 0; m < num_neighbors; m++) {
+          int candidate_id = *(neighbors + m);
+          selected_pool[new_size].id = candidate_id;
+          for (size_t n = 0; n < hash_len; n += 64) {
+            _mm_prefetch(data_level0_memory_ + max_elements_ * size_data_per_element_ + candidate_id * hash_len + n, _MM_HINT_T0);
+          }
+          new_size++;
+        }
+      }
+
+      if (new_size < selected_pool_size_limit) return new_size;
+
+      uint64_t hamming_result[4];
+      size_t selected_pool_size = 0;
+      float hamming_modifier = 1.0 / hash_bitwidth_;
+      typename std::vector<HashNeighbor>::iterator index;
+
+      for (size_t m = 0; m < new_size; m++) {
+        tableint id = selected_pool[m].id;
+        float distance = 0.0;
+        void* hashed_set_address = (void*)(data_level0_memory_ + max_elements_ * size_data_per_element_ + id * hash_len);
+        float norm = *(float*)hashed_set_address;
+        hashed_set_address += sizeof(float);
+        float sqrt_norm = *(float*)hashed_set_address;
+        hashed_set_address += sizeof(float);
+        float mul_query_base = sqrt_norm * query_norm;
+        uint32_t hamming_distance = 0;
+#ifdef __AVX__
+        for (unsigned int i = 0; i < (hash_bitwidth_ >> 8); i++) {
+          __m256i q, hashed_set_avx;
+          __m256i hamming_result_avx;
+          
+          q = _mm256_loadu_si256((__m256i*)(hashed_query + (i << 5)));
+          hashed_set_avx = _mm256_loadu_si256((__m256i*)(hashed_set_address));
+          hamming_result_avx = _mm256_xor_si256(q, hashed_set_avx);
+          _mm256_storeu_si256((__m256i*)&hamming_result, hamming_result_avx);
+
+          hamming_distance += _mm_popcnt_u64(hamming_result[0]);
+          hamming_distance += _mm_popcnt_u64(hamming_result[1]);
+          hamming_distance += _mm_popcnt_u64(hamming_result[2]);
+          hamming_distance += _mm_popcnt_u64(hamming_result[3]);
+          hashed_set_address += 32;
+        }
+#endif
+        if (dist_type_ == 0) { // L2
+          distance = - norm + 2 * mul_query_base * cosine_table[hamming_distance];
+        }
+        else { // Inner Product
+          distance = mul_query_base * cosine_table[hamming_distance];
+        }
+        HashNeighbor cat_hamming_id(id, distance);
+        if ((selected_pool_size_limit == selected_pool_size) && (distance > index->distance)) {
+          *index = cat_hamming_id;
+          index = std::min_element(selected_pool.begin(), selected_pool.begin() + selected_pool_size_limit);
+        }
+
+        if (selected_pool_size < selected_pool_size_limit) {
+          selected_pool[selected_pool_size] = cat_hamming_id;
+          selected_pool_size++;
+          if (selected_pool_size == selected_pool_size_limit) {
+            index = std::min_element(selected_pool.begin(), selected_pool.begin() + selected_pool_size_limit);
+          }
+        }
+      }
+      return selected_pool_size;
     }
 };
 }  // namespace hnswlib

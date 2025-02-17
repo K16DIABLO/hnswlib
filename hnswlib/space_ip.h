@@ -18,6 +18,20 @@ InnerProductDistance(const void *pVect1, const void *pVect2, const void *qty_ptr
     return 1.0f - InnerProduct(pVect1, pVect2, qty_ptr);
 }
 
+//static float
+//L2Norm(const void *pVect1v, const void *qty_ptr) {
+//    float *pVect1 = (float *) pVect1v;
+//    size_t qty = *((size_t *) qty_ptr);
+//
+//    float res = 0;
+//    for (size_t i = 0; i < qty; i++) {
+//        float t = *pVect1;
+//        pVect1++;
+//        res += t * t;
+//    }
+//    return (res);
+//}
+
 #if defined(USE_AVX)
 
 // Favor using AVX if available.
@@ -203,6 +217,32 @@ InnerProductDistanceSIMD16ExtAVX512(const void *pVect1v, const void *pVect2v, co
     return 1.0f - InnerProductSIMD16ExtAVX512(pVect1v, pVect2v, qty_ptr);
 }
 
+//static float
+//L2NormSIMD16ExtAVX512(const void *pVect1v, const void *qty_ptr) {
+//    float *pVect1 = (float *) pVect1v;
+//    size_t qty = *((size_t *) qty_ptr);
+//    float PORTABLE_ALIGN64 TmpRes[16];
+//    size_t qty16 = qty >> 4;
+//
+//    const float *pEnd1 = pVect1 + (qty16 << 4);
+//
+//    __m512 v1;
+//    __m512 sum = _mm512_set1_ps(0);
+//
+//    while (pVect1 < pEnd1) {
+//        v1 = _mm512_loadu_ps(pVect1);
+//        pVect1 += 16;
+//        sum = _mm512_add_ps(sum, _mm512_mul_ps(v1, v1));
+//    }
+//
+//    _mm512_store_ps(TmpRes, sum);
+//    float res = TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3] + TmpRes[4] + TmpRes[5] + TmpRes[6] +
+//            TmpRes[7] + TmpRes[8] + TmpRes[9] + TmpRes[10] + TmpRes[11] + TmpRes[12] +
+//            TmpRes[13] + TmpRes[14] + TmpRes[15];
+//
+//    return (res);
+//}
+
 #endif
 
 #if defined(USE_AVX)
@@ -247,6 +287,32 @@ static float
 InnerProductDistanceSIMD16ExtAVX(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
     return 1.0f - InnerProductSIMD16ExtAVX(pVect1v, pVect2v, qty_ptr);
 }
+
+//static float
+//L2NormSIMD16ExtAVX(const void *pVect1v, const void *qty_ptr) {
+//    float *pVect1 = (float *) pVect1v;
+//    size_t qty = *((size_t *) qty_ptr);
+//    float PORTABLE_ALIGN32 TmpRes[8];
+//    size_t qty16 = qty >> 4;
+//
+//    const float *pEnd1 = pVect1 + (qty16 << 4);
+//
+//    __m256 v1;
+//    __m256 sum = _mm256_set1_ps(0);
+//
+//    while (pVect1 < pEnd1) {
+//        v1 = _mm256_loadu_ps(pVect1);
+//        pVect1 += 8;
+//        sum = _mm256_add_ps(sum, _mm256_mul_ps(v1, v1));
+//
+//        v1 = _mm256_loadu_ps(pVect1);
+//        pVect1 += 8;
+//        sum = _mm256_add_ps(sum, _mm256_mul_ps(v1, v1));
+//    }
+//
+//    _mm256_store_ps(TmpRes, sum);
+//    return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3] + TmpRes[4] + TmpRes[5] + TmpRes[6] + TmpRes[7];
+//}
 
 #endif
 
@@ -302,6 +368,41 @@ InnerProductDistanceSIMD16ExtSSE(const void *pVect1v, const void *pVect2v, const
     return 1.0f - InnerProductSIMD16ExtSSE(pVect1v, pVect2v, qty_ptr);
 }
 
+//static float
+//L2NormSIMD16ExtSSE(const void *pVect1v, const void *qty_ptr) {
+//    float *pVect1 = (float *) pVect1v;
+//    size_t qty = *((size_t *) qty_ptr);
+//    float PORTABLE_ALIGN32 TmpRes[8];
+//    size_t qty16 = qty >> 4;
+//
+//    const float *pEnd1 = pVect1 + (qty16 << 4);
+//
+//    __m128 v1;
+//    __m128 sum = _mm_set1_ps(0);
+//
+//    while (pVect1 < pEnd1) {
+//        //_mm_prefetch((char*)(pVect2 + 16), _MM_HINT_T0);
+//        v1 = _mm_loadu_ps(pVect1);
+//        pVect1 += 4;
+//        sum = _mm_add_ps(sum, _mm_mul_ps(v1, v1));
+//
+//        v1 = _mm_loadu_ps(pVect1);
+//        pVect1 += 4;
+//        sum = _mm_add_ps(sum, _mm_mul_ps(v1, v1));
+//
+//        v1 = _mm_loadu_ps(pVect1);
+//        pVect1 += 4;
+//        sum = _mm_add_ps(sum, _mm_mul_ps(v1, v1));
+//
+//        v1 = _mm_loadu_ps(pVect1);
+//        pVect1 += 4;
+//        sum = _mm_add_ps(sum, _mm_mul_ps(v1, v1));
+//    }
+//
+//    _mm_store_ps(TmpRes, sum);
+//    return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];
+//}
+
 #endif
 
 #if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
@@ -309,6 +410,7 @@ static DISTFUNC<float> InnerProductSIMD16Ext = InnerProductSIMD16ExtSSE;
 static DISTFUNC<float> InnerProductSIMD4Ext = InnerProductSIMD4ExtSSE;
 static DISTFUNC<float> InnerProductDistanceSIMD16Ext = InnerProductDistanceSIMD16ExtSSE;
 static DISTFUNC<float> InnerProductDistanceSIMD4Ext = InnerProductDistanceSIMD4ExtSSE;
+//static NORMFUNC<float> L2NormSIMD16Ext = L2NormSIMD16ExtSSE;
 
 static float
 InnerProductDistanceSIMD16ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
@@ -322,6 +424,18 @@ InnerProductDistanceSIMD16ExtResiduals(const void *pVect1v, const void *pVect2v,
     float res_tail = InnerProduct(pVect1, pVect2, &qty_left);
     return 1.0f - (res + res_tail);
 }
+
+//static float
+//L2NormSIMD16ExtResiduals(const void *pVect1v, const void *qty_ptr) {
+//    size_t qty = *((size_t *) qty_ptr);
+//    size_t qty16 = qty >> 4 << 4;
+//    float res = L2NormSIMD16Ext(pVect1v, &qty16);
+//    float *pVect1 = (float *) pVect1v + qty16;
+//
+//    size_t qty_left = qty - qty16;
+//    float res_tail = L2Norm(pVect1, &qty_left);
+//    return (res + res_tail);
+//}
 
 static float
 InnerProductDistanceSIMD4ExtResiduals(const void *pVect1v, const void *pVect2v, const void *qty_ptr) {
@@ -337,10 +451,49 @@ InnerProductDistanceSIMD4ExtResiduals(const void *pVect1v, const void *pVect2v, 
 
     return 1.0f - (res + res_tail);
 }
+
+//static float
+//L2NormSIMD4Ext(const void *pVect1v, const void *qty_ptr) {
+//    float PORTABLE_ALIGN32 TmpRes[8];
+//    float *pVect1 = (float *) pVect1v;
+//    size_t qty = *((size_t *) qty_ptr);
+//
+//
+//    size_t qty4 = qty >> 2;
+//
+//    const float *pEnd1 = pVect1 + (qty4 << 2);
+//
+//    __m128 v1;
+//    __m128 sum = _mm_set1_ps(0);
+//
+//    while (pVect1 < pEnd1) {
+//        v1 = _mm_loadu_ps(pVect1);
+//        pVect1 += 4;
+//        sum = _mm_add_ps(sum, _mm_mul_ps(v1, v1));
+//    }
+//    _mm_store_ps(TmpRes, sum);
+//    return TmpRes[0] + TmpRes[1] + TmpRes[2] + TmpRes[3];
+//}
+//
+//static float
+//L2NormSIMD4ExtResiduals(const void *pVect1v, const void *qty_ptr) {
+//    size_t qty = *((size_t *) qty_ptr);
+//    size_t qty4 = qty >> 2 << 2;
+//
+//    float res = L2NormSIMD4Ext(pVect1v, &qty4);
+//    size_t qty_left = qty - qty4;
+//
+//    float *pVect1 = (float *) pVect1v + qty4;
+//    float res_tail = L2Norm(pVect1, &qty_left);
+//
+//    return (res + res_tail);
+//}
 #endif
 
 class InnerProductSpace : public SpaceInterface<float> {
     DISTFUNC<float> fstdistfunc_;
+    NORMFUNC<float> normfunc_;
+    DISTFUNC<float> dotfunc_;
     size_t data_size_;
     size_t dim_;
 
@@ -378,6 +531,40 @@ class InnerProductSpace : public SpaceInterface<float> {
         else if (dim > 4)
             fstdistfunc_ = InnerProductDistanceSIMD4ExtResiduals;
 #endif
+
+        normfunc_ = L2Norm;
+#if defined(USE_SSE) || defined(USE_AVX) || defined(USE_AVX512)
+    #if defined(USE_AVX512)
+        if (AVX512Capable())
+            L2NormSIMD16Ext = L2NormSIMD16ExtAVX512;
+        else if (AVXCapable())
+            L2NormSIMD16Ext = L2NormSIMD16ExtAVX;
+    #elif defined(USE_AVX)
+        if (AVXCapable())
+            L2NormSIMD16Ext = L2NormSIMD16ExtAVX;
+    #endif
+
+        if (dim % 16 == 0)
+            normfunc_ = L2NormSIMD16Ext;
+        else if (dim % 4 == 0)
+            normfunc_ = L2NormSIMD4Ext;
+        else if (dim > 16)
+            normfunc_ = L2NormSIMD16ExtResiduals;
+        else if (dim > 4)
+            normfunc_ = L2NormSIMD4ExtResiduals;
+#endif
+
+        dotfunc_ = InnerProduct;
+#if defined(USE_AVX) || defined(USE_SSE) || defined(USE_AVX512)
+        if (dim % 16 == 0)
+            dotfunc_ = InnerProductDistanceSIMD16Ext;
+        else if (dim % 4 == 0)
+            dotfunc_ = InnerProductDistanceSIMD4Ext;
+        else if (dim > 16)
+            dotfunc_ = InnerProductDistanceSIMD16ExtResiduals;
+        else if (dim > 4)
+            dotfunc_ = InnerProductDistanceSIMD4ExtResiduals;
+#endif
         dim_ = dim;
         data_size_ = dim * sizeof(float);
     }
@@ -388,6 +575,14 @@ class InnerProductSpace : public SpaceInterface<float> {
 
     DISTFUNC<float> get_dist_func() {
         return fstdistfunc_;
+    }
+
+    NORMFUNC<float> get_norm_func() {
+        return normfunc_;
+    }
+
+    DISTFUNC<float> get_dot_func() {
+        return dotfunc_;
     }
 
     void *get_dist_func_param() {

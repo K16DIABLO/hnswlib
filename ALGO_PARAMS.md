@@ -8,8 +8,12 @@ leads to more accurate but slower search. ```ef``` cannot be set lower than the 
 The ```knn_query``` function returns two numpy arrays, containing labels and distances to the k found nearest 
 elements for the queries. Note that in case the algorithm is not be able to find ```k``` neighbors to all of the queries,
 (this can be due to problems with graph or ```k```>size of the dataset) an exception is thrown.
+* ```tau``` - the portion of the neighbors that are selected for exact similarity computation. The range of ```tau``` is from 0.0 to 1.0,
+where 1.0 means all neighbors are selected and 0.0 means no neighbors.
+* ```hash_bitwidth``` - the bitwidth to project feature vector to hashed binary vector. Higher ```hash_biwidth``` can estimate 
+more accuarte approximate similarity but slower neighbor selection. The value ```hash_bitwidth``` muste be a multiple of 256 to utilize AVX.
 
-An example of tuning the parameters can be found in [TESTING_RECALL.md](TESTING_RECALL.md)
+An example of tuning the parameters can be found in [1m_test.cpp](test/cpp/1m_test.cpp)
 
 ## Construction parameters:
 * ```M``` - the number of bi-directional links created for every new element during construction. Reasonable range for ```M``` 
