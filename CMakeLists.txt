@@ -102,4 +102,8 @@ if(HNSWLIB_EXAMPLES)
 
     add_executable(main tests/cpp/main.cpp tests/cpp/sift_1b.cpp)
     target_link_libraries(main hnswlib)
+
+    # Sungjun: Executable for 1M datasets
+    add_executable(main_1m tests/cpp/main_1m.cpp tests/cpp/1m_test.cpp)
+    target_link_libraries(main_1m hnswlib)
 endif()
