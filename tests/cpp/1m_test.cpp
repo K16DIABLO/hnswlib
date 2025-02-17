@@ -270,10 +270,10 @@ void sift1M_test() {
     size_t qsize = 10000;
     size_t vecdim = 128;
     char path_index[4096];
-    const char *path_q = "../../../dataset/sift1M/sift1M_query.fvecs";
-    const char *path_data = "../../../dataset/sift1M/sift1M_base.fvecs";
-    const char *path_gt = "../../../dataset/sift1M/sift1M_groundtruth.ivecs";
-    snprintf(path_index, sizeof(path_index), "../../../dataset/hnsw_index/sift1M_ef_%d_M_%d.bin", efConstruction, M);
+    const char *path_q = "../dataset/sift1M/sift1M_query.fvecs";
+    const char *path_data = "../dataset/sift1M/sift1M_base.fvecs";
+    const char *path_gt = "../dataset/sift1M/sift1M_groundtruth.ivecs";
+    snprintf(path_index, sizeof(path_index), "../dataset/hnsw_index/sift1M_ef_%d_M_%d.bin", efConstruction, M);
 
 
     cout << "Loading GT:\n";
@@ -400,10 +400,10 @@ void gist1M_test() {
     size_t qsize = 10000;
     size_t vecdim = 128;
     char path_index[4096];
-    const char *path_q = "../../../dataset/gist1M/gist1M_query.fvecs";
-    const char *path_data = "../../../dataset/gist1M/gist1M_base.fvecs";
-    const char *path_gt = "../../../dataset/gist1M/gist1M_groundtruth.ivecs";
-    snprintf(path_index, sizeof(path_index), "../../../dataset/hnsw_index/gist1M_ef_%d_M_%d.bin", efConstruction, M);
+    const char *path_q = "../dataset/gist1M/gist1M_query.fvecs";
+    const char *path_data = "../dataset/gist1M/gist1M_base.fvecs";
+    const char *path_gt = "../dataset/gist1M/gist1M_groundtruth.ivecs";
+    snprintf(path_index, sizeof(path_index), "../dataset/hnsw_index/gist1M_ef_%d_M_%d.bin", efConstruction, M);
 
 
     cout << "Loading GT:\n";
@@ -530,10 +530,10 @@ void crawl_test() {
     size_t qsize = 10000;
     size_t vecdim = 128;
     char path_index[4096];
-    const char *path_q = "../../../dataset/crawl/crawl_query.fvecs";
-    const char *path_data = "../../../dataset/crawl/crawl_base.fvecs";
-    const char *path_gt = "../../../dataset/crawl/crawl_groundtruth.ivecs";
-    snprintf(path_index, sizeof(path_index), "../../../dataset/hnsw_index/crawl_ef_%d_M_%d.bin", efConstruction, M);
+    const char *path_q = "../dataset/crawl/crawl_query.fvecs";
+    const char *path_data = "../dataset/crawl/crawl_base.fvecs";
+    const char *path_gt = "../dataset/crawl/crawl_groundtruth.ivecs";
+    snprintf(path_index, sizeof(path_index), "../dataset/hnsw_index/crawl_ef_%d_M_%d.bin", efConstruction, M);
 
 
     cout << "Loading GT:\n";
@@ -660,10 +660,10 @@ void glove_test() {
     size_t qsize = 10000;
     size_t vecdim = 128;
     char path_index[4096];
-    const char *path_q = "../../../dataset/glove-100/glove-100_query.fvecs";
-    const char *path_data = "../../../dataset/glove-100/glove-100_base.fvecs";
-    const char *path_gt = "../../../dataset/glove-100/glove-100_groundtruth.ivecs";
-    snprintf(path_index, sizeof(path_index), "../../../dataset/hnsw_index/glove-100_ef_%d_M_%d.bin", efConstruction, M);
+    const char *path_q = "../dataset/glove-100/glove-100_query.fvecs";
+    const char *path_data = "../dataset/glove-100/glove-100_base.fvecs";
+    const char *path_gt = "../dataset/glove-100/glove-100_groundtruth.ivecs";
+    snprintf(path_index, sizeof(path_index), "../dataset/hnsw_index/glove-100_ef_%d_M_%d.bin", efConstruction, M);
 
 
     cout << "Loading GT:\n";
@@ -802,10 +802,10 @@ void nytimes_test() {
     size_t qsize = 10000;
     size_t vecdim = 128;
     char path_index[4096];
-    const char *path_q = "../../../dataset/nytimes/nytimes_query.fvecs";
-    const char *path_data = "../../../dataset/nytimes/nytimes_base.fvecs";
-    const char *path_gt = "../../../dataset/nytimes/nytimes_groundtruth.ivecs";
-    snprintf(path_index, sizeof(path_index), "../../../dataset/hnsw_index/nytimes_ef_%d_M_%d.bin", efConstruction, M);
+    const char *path_q = "../dataset/nytimes/nytimes_query.fvecs";
+    const char *path_data = "../dataset/nytimes/nytimes_base.fvecs";
+    const char *path_gt = "../dataset/nytimes/nytimes_groundtruth.ivecs";
+    snprintf(path_index, sizeof(path_index), "../dataset/hnsw_index/nytimes_ef_%d_M_%d.bin", efConstruction, M);
 
 
     cout << "Loading GT:\n";
@@ -944,10 +944,10 @@ void deep100M_test() {
     size_t qsize = 10000;
     size_t vecdim = 128;
     char path_index[4096];
-    const char *path_q = "../../../dataset/deep100M/deep100M_query.fvecs";
-    const char *path_data = "../../../dataset/deep100M/deep100M_base.fvecs";
-    const char *path_gt = "../../../dataset/deep100M/deep100M_groundtruth.ivecs";
-    snprintf(path_index, sizeof(path_index), "../../../dataset/hnsw_index/deep100M_ef_%d_M_%d.bin", efConstruction, M);
+    const char *path_q = "../dataset/deep100M/deep100M_query.fvecs";
+    const char *path_data = "../dataset/deep100M/deep100M_base.fvecs";
+    const char *path_gt = "../dataset/deep100M/deep100M_groundtruth.ivecs";
+    snprintf(path_index, sizeof(path_index), "../dataset/hnsw_index/deep100M_ef_%d_M_%d.bin", efConstruction, M);
 
 
     cout << "Loading GT:\n";
