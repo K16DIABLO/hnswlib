@@ -220,13 +220,13 @@ test_vs_recall(
     double hash_query_time = 0.0) {
     std::cout << "Qsize: " << qsize << std::endl;
     vector<size_t> efs;  // = { 10,10,10,10,10 };
-    efs.push_back(80);
-//    for (int i = k; i < 30; i++) {
-//        efs.push_back(i);
-//    }
-//    for (int i = 30; i < 150; i += 10) {
-//        efs.push_back(i);
-//    }
+//    efs.push_back(80);
+    for (int i = k; i < 30; i++) {
+        efs.push_back(i);
+    }
+    for (int i = 30; i < 150; i += 10) {
+        efs.push_back(i);
+    }
 //    for (int i = 150; i < 500; i += 50) {
 //        efs.push_back(i);
 //    }
