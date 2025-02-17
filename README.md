@@ -15,4 +15,4 @@ To reproduce baseline HNSW results:
 ```
 
 Parameters are hardcoded in **1m_test.cpp**  
-Please refer to [ALGO_PARAMS.md](ALGO_PARAMS.md)
+Please refer to [ALGO_PARAMS.md](ALGO_PARAMS.md) to get details about parameters to construct HNSW index
