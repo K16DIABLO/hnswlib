@@ -1,6 +1,6 @@
 # ADA-NNS (HNSW) - Angular Distance-Guided Neighbor Selection for Graph-Based Approximate Nearest Neighbor Search
 
-This repository is HNSW with ADA-NNS
+This repository is HNSW with ADA-NNS. ADA-NNS is a novel guided search algorithm that dynamically filters out less relevant neighbors by employing a lightweight proxy based on an approximate angular distance
 
 ### Prerequisites
 
@@ -8,7 +8,7 @@ This repository is HNSW with ADA-NNS
 + CMake 3.22.2+
 + Eigen library
 
-**IMPORTANT NOTE: this code uses AVX-256 intructions for fast approximate similarity computation, so your machine MUST support AVX-256 intructions, this can be checked using `cat /proc/cpuinfo | grep avx2`.** 
+**NOTE: ADA-NNS uses AVX intructions for fast approximate similarity computation. Please check whether your machine supports AVX instruction using `cat /proc/cpuinfo | grep avx2`.** 
 
 ### Datasets
 
