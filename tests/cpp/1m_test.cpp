@@ -209,13 +209,12 @@ test_vs_recall(
     vector<std::priority_queue<std::pair<float, labeltype>>> &answers,
     size_t k) {
     vector<size_t> efs;  // = { 10,10,10,10,10 };
-    efs.push_back(73);
-//    for (int i = ik; i < 30; i++) {
-//        efs.push_back(i);
-//    }
-//    for (int i = 30; i < 150; i += 10) {
-//        efs.push_back(i);
-//    }
+    for (int i = k; i < 30; i++) {
+        efs.push_back(i);
+    }
+    for (int i = 30; i < 150; i += 10) {
+        efs.push_back(i);
+    }
 //    for (int i = 150; i < 500; i += 50) {
 //        efs.push_back(i);
 //    }
@@ -234,10 +233,6 @@ test_vs_recall(
         auto s = std::chrono::high_resolution_clock::now();
 //        StopW stopw = StopW();
 
-//        // [ARC-SJ] Initialize visited lists
-//        appr_alg.visited_list_pool_.reset();
-//        appr_alg.visited_list_pool_ = std::unique_ptr<VisitedListPool>(new VisitedListPool(1, appr_alg.max_elements_));
-
         float tmp_recall = test_approx(massQ, vecsize, qsize, appr_alg, vecdim, answers, k);
         auto e = std::chrono::high_resolution_clock::now();
         std::chrono::duration<double> diff = e - s;
@@ -251,21 +246,9 @@ test_vs_recall(
         }
 
         cout << ef << "\t" << recall << "\t" << qps << " ";
-#ifdef PROFILE
-        cout << appr_alg.profile_time[0] * 1000000 / qsize << " " << appr_alg.profile_time[1] * 1000000 / qsize << " " << appr_alg.profile_time[2] * 1000000 / qsize << " " << appr_alg.profile_time[3] * 1000000 / qsize << " ";
-#endif
-#ifdef GET_EFFICIENCY
-        cout << appr_alg.total_similarity_compute << " " << appr_alg.effective_similarity_compute << " " << 100.0 * appr_alg.effective_similarity_compute / appr_alg.total_similarity_compute << " ";
-#endif
         cout << std::endl;
         if (recall > 1.0) {
             cout << recall << "\t" << qps << " ";
-#ifdef PROFILE
-            cout << appr_alg.profile_time[0] * 1000000 / qsize << " " << appr_alg.profile_time[1] * 1000000 / qsize << " " << appr_alg.profile_time[2] * 1000000 / qsize << " ";
-#endif
-#ifdef GET_EFFICIENCY
-            cout << appr_alg.total_similarity_compute << " " << appr_alg.effective_similarity_compute << " " <<  100.0 * appr_alg.effective_similarity_compute / appr_alg.total_similarity_compute << " ";
-#endif
             cout << std::endl;
             break;
         }
